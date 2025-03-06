@@ -1,0 +1,29 @@
+services:
+  devrunner:
+    image: devrunner-jr-auto
+    build:
+      context: .
+      dockerfile: ./Dockerfile.dev
+      args:
+        - USER_UID=${USER_UID}
+    volumes:
+      - type: bind
+        source: ./
+        target: /home/devrunner/src
+      - type: bind
+        source: ${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}
+        target: /tmp/runtime-dir/${WAYLAND_DISPLAY}
+        read_only: true
+      - type: bind
+        source: /tmp/.X11-unix/X0
+        target: /tmp/.X11-unix/X0
+        read_only: true
+    restart: no
+    #ipc: host
+    security_opt:
+      - seccomp:./seccomp_profile.json
+    environment:
+      - ENV=${ENV}
+      - WAYLAND_DISPLAY=${WAYLAND_DISPLAY}
+      - DISPLAY=${DISPLAY}
+
