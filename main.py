@@ -5,11 +5,13 @@ import asyncio
 import time
 import datetime
 import pytz
+import numpy as np
 from io import BytesIO
 from playwright.async_api import async_playwright
 import pandas as pd
 
 LIMIT_QUERY = 499
+KEYWORDS = ["UNIVERSIDAD", "HOSPITAL", "COLEGIO"]
 
 def recreate_folder(path):
     if os.path.exists(path):
@@ -148,8 +150,49 @@ async def query_years_data(browser, year, current_date):
     else:
         return pd.DataFrame()
 
+def filter_data_to_excel(df, output_file):
+    def convert_to_float(x):
+        try:
+            return float(x.replace(',', ''))
+        except Exception:
+            return np.nan
+
+    # Drop the "N°" column.
+    if "N°" in df.columns:
+        df = df.drop("N°", axis=1)
+
+    # Create a helper numeric column for filtering and sorting.
+    df['valor_numeric'] = df["Valor Referencial / Valor Estimado"].apply(convert_to_float)
+
+    # Filter the DataFrame:
+    mask = (df['valor_numeric'] > 4000000) | (df['valor_numeric'].isna())
+    df_filtered = df[mask].copy()
+
+    # Sort the filtered DataFrame in descending order using the numeric column.
+    # Rows with non-numeric values (i.e. NaN) will be placed at the end.
+    df_sorted = df_filtered.sort_values(by='valor_numeric', ascending=False, na_position='last')
+
+    # Replace "Valor Referencial / Valor Estimado" values with the numeric ones.
+    df_sorted["Valor Referencial / Valor Estimado"] = df_sorted['valor_numeric']
+    # Optionally drop the helper column if no longer needed.
+    df_sorted = df_sorted.drop('valor_numeric', axis=1)
+
+    keyword_dfs = {}
+    for keyword in KEYWORDS:
+        keyword_dfs[keyword] = df_sorted[df_sorted["Descripción de Objeto"].str.contains(keyword, case=False, na=False)]
+
+    # Export all DataFrames to an Excel file with each on a separate sheet.
+    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+        # Main filtered and sorted DataFrame.
+        df_sorted.to_excel(writer, sheet_name='Data filtrada', index=False)
+        # Export each keyword-specific DataFrame.
+        for keyword, df_kw in keyword_dfs.items():
+            df_kw.to_excel(writer, sheet_name=keyword.capitalize(), index=False)
+
 async def main():
     recreate_folder("./tmp/")
+    if not os.path.exists("./data/"):
+        raise FileNotFoundError("Directory ./data/ does not exist!")
 
     # Get date data
     timezone = pytz.timezone('America/Lima')
@@ -163,10 +206,13 @@ async def main():
             browser = await p.chromium.launch(headless=True)
 
         #for year in [str(current_date.year - i) for i in range(1)]:
-        for year in ["2022"]:
+        for year in ["2025"]:
+            export_filepath = f"./data/{year}.xlsx"
+            filter_filepath = f"./data/SEACE_OBRAS_{year}.xlsx"
+
             df = await query_years_data(browser, year, current_date)
-            print(df)
-            df.to_excel(f"TABLE_{year}.xlsx", index=False)
+            df.to_excel(export_filepath, index=False)
+            filter_data_to_excel(df, filter_filepath)
 
         # Cleanup
         await browser.close()
