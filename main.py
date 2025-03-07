@@ -205,12 +205,11 @@ async def main():
         else:
             browser = await p.chromium.launch(headless=True)
 
-        #for year in [str(current_date.year - i) for i in range(1)]:
-        for year in ["2025"]:
+        for year in [str(current_date.year - i) for i in range(1)]:
             print(f"Starting data collection for year {year}.")
             export_filepath = f"./data/{year}.xlsx"
             filter_filepath = f"./data/SEACE_OBRAS_{year}.xlsx"
-            if os.path.exists(export_filepath):
+            if os.path.exists(export_filepath) and year != str(current_date.year):
                 print(f"{export_filepath} already exists, skipping query.")
                 df = pd.read_excel(export_filepath)
             else:
