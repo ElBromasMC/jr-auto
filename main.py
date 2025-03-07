@@ -170,7 +170,7 @@ def filter_data_to_excel(df, output_file):
 
     # Sort the filtered DataFrame in descending order using the numeric column.
     # Rows with non-numeric values (i.e. NaN) will be placed at the end.
-    df_sorted = df_filtered.sort_values(by='valor_numeric', ascending=False, na_position='last')
+    df_sorted = df_filtered.sort_values(by='valor_numeric', ascending=False, na_position='first')
 
     # Replace "Valor Referencial / Valor Estimado" values with the numeric ones.
     df_sorted["Valor Referencial / Valor Estimado"] = df_sorted['valor_numeric']
@@ -207,11 +207,15 @@ async def main():
 
         #for year in [str(current_date.year - i) for i in range(1)]:
         for year in ["2025"]:
+            print(f"Starting data collection for year {year}.")
             export_filepath = f"./data/{year}.xlsx"
             filter_filepath = f"./data/SEACE_OBRAS_{year}.xlsx"
-
-            df = await query_years_data(browser, year, current_date)
-            df.to_excel(export_filepath, index=False)
+            if os.path.exists(export_filepath):
+                print(f"{export_filepath} already exists, skipping query.")
+                df = pd.read_excel(export_filepath)
+            else:
+                df = await query_years_data(browser, year, current_date)
+                df.to_excel(export_filepath, index=False)
             filter_data_to_excel(df, filter_filepath)
 
         # Cleanup
