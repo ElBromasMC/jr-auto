@@ -205,7 +205,7 @@ async def main():
         else:
             browser = await p.chromium.launch(headless=True)
 
-        for year in [str(current_date.year - i) for i in range(1)]:
+        for year in [str(current_date.year - i) for i in range(4)]:
             print(f"Starting data collection for year {year}.")
             export_filepath = f"./data/{year}.xlsx"
             filter_filepath = f"./data/SEACE_OBRAS_{year}.xlsx"
