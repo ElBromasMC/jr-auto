@@ -29,7 +29,7 @@ WORKDIR /playwright
 RUN python3 -m venv venv \
     && . venv/bin/activate \
     && pip install playwright \
-    && playwright install-deps --only-shell chromium \
+    && playwright install-deps chromium-headless-shell \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /playwright
 
@@ -51,7 +51,7 @@ RUN python3 -m venv venv \
     pandas \
     xlrd \
     openpyxl \
-    && playwright install --only-shell chromium
+    && playwright install --only-shell chromium-headless-shell
 
 # Create data folders
 RUN mkdir -p /home/runner/.config/onedrive
