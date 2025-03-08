@@ -1,4 +1,5 @@
 import os
+import subprocess
 import uuid
 import shutil
 import asyncio
@@ -13,6 +14,12 @@ import pandas as pd
 
 LIMIT_QUERY = 499
 KEYWORDS = ["UNIVERSIDAD", "HOSPITAL", "COLEGIO"]
+
+DATA_DIR  = os.environ.get("DATA_DIR", "./data")
+TMP_DIR   = f"{DATA_DIR}/tmp"
+QUERY_DIR = f"{DATA_DIR}/query"
+DRIVE_DIR = f"{DATA_DIR}/Onedrive"
+EXPORT_DIR = "Archive" # Relative to DRIVE_DIR
 
 def recreate_folder(path):
     if os.path.exists(path):
@@ -66,7 +73,7 @@ async def get_data(browser, year, start_date, end_date):
     async with page.expect_download() as download_info:
         await page.get_by_role("button", name="Exportar a Excel").click()
     download = await download_info.value
-    filepath = f"./tmp/{uuid.uuid4()}.xls"
+    filepath = f"{TMP_DIR}/{uuid.uuid4()}.xls"
     await download.save_as(filepath)
 
     # Cleanup
@@ -209,9 +216,12 @@ def filter_data_to_excel(df, output_file):
     wb.save(output_file)
 
 async def main():
-    recreate_folder("./tmp/")
-    if not os.path.exists("./data/"):
-        raise FileNotFoundError("Directory ./data/ does not exist!")
+    if not os.path.isdir(DATA_DIR):
+        raise FileNotFoundError(f"Directory {DATA_DIR} does not exist!")
+
+    recreate_folder(TMP_DIR)
+    os.makedirs(QUERY_DIR, exist_ok=True)
+    os.makedirs(f"{DRIVE_DIR}/{EXPORT_DIR}", exist_ok=True)
 
     # Get date data
     timezone = pytz.timezone('America/Lima')
@@ -224,11 +234,10 @@ async def main():
         else:
             browser = await p.chromium.launch(headless=True)
 
-        #for year in [str(current_date.year - i) for i in range(4)]:
-        for year in ["2022"]:
+        for year in [str(current_date.year - i) for i in range(4)]:
             print(f"Starting data collection for year {year}.")
-            export_filepath = f"./data/{year}.xlsx"
-            filter_filepath = f"./data/SEACE_OBRAS_{year}.xlsx"
+            export_filepath = f"{QUERY_DIR}/{year}.xlsx"
+            filter_filepath = f"{DRIVE_DIR}/{EXPORT_DIR}/SEACE_OBRAS_{year}.xlsx"
             if os.path.exists(export_filepath) and year != str(current_date.year):
                 print(f"{export_filepath} already exists, skipping query.")
                 df = pd.read_excel(export_filepath)
@@ -241,6 +250,23 @@ async def main():
         await browser.close()
 
     # Export data
+    result = subprocess.run([
+        "onedrive",
+        "--sync",
+        "--syncdir",
+        DRIVE_DIR,
+        "--single-directory",
+        EXPORT_DIR,
+        "--upload-only",
+        "--no-remote-delete",
+        "--resync",
+        "--resync-auth",
+    ], capture_output=True, text=True)
+
+    if result.returncode == 0:
+        print(f"Successfully uploaded files")
+    else:
+        print(f"Error uploading files: {result.stderr}")
 
 asyncio.run(main())
 

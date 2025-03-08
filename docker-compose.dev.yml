@@ -6,10 +6,13 @@ services:
       dockerfile: ./Dockerfile.dev
       args:
         - USER_UID=${USER_UID}
+    #user: "devrunner:devrunner"
     volumes:
+      # Bind source directory
       - type: bind
         source: ./
         target: /home/devrunner/src
+      # Bind display
       - type: bind
         source: ${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}
         target: /tmp/runtime-dir/${WAYLAND_DISPLAY}
@@ -18,12 +21,22 @@ services:
         source: /tmp/.X11-unix/X0
         target: /tmp/.X11-unix/X0
         read_only: true
+      # Persistent data
+      - onedrive-data:/home/devrunner/.config/onedrive
+      - jr-auto-data:/home/devrunner/data
     restart: no
     #ipc: host
     security_opt:
       - seccomp:./seccomp_profile.json
     environment:
-      - ENV=${ENV}
+      # Display environment
       - WAYLAND_DISPLAY=${WAYLAND_DISPLAY}
       - DISPLAY=${DISPLAY}
+      # App environment
+      - ENV=${ENV}
+      - DATA_DIR=/home/devrunner/data
+
+volumes:
+  onedrive-data:
+  jr-auto-data:
 

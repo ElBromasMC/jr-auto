@@ -1,5 +1,6 @@
 FROM ubuntu:oracular
 
+
 RUN apt-get update \
     && apt-get install -y \
     python3 \
@@ -9,7 +10,19 @@ RUN apt-get update \
     git \
     openssh-client \
     gpg \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+RUN wget -qO - \
+    https://download.opensuse.org/repositories/home:/npreining:/debian-ubuntu-onedrive/xUbuntu_24.10/Release.key \
+    | gpg --dearmor \
+    | tee /usr/share/keyrings/obs-onedrive.gpg \
+    > /dev/null \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/obs-onedrive.gpg] https://download.opensuse.org/repositories/home:/npreining:/debian-ubuntu-onedrive/xUbuntu_24.10/ ./" \
+    | tee /etc/apt/sources.list.d/onedrive.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends --no-install-suggests \
+    onedrive
 
 # Use venv to install Playwright dependencies
 WORKDIR /playwright
@@ -51,12 +64,8 @@ RUN python3 -m venv venv \
     && . venv/bin/activate \
     && pip install playwright \
     pandas \
-    msgraph-sdk \
     xlrd \
     openpyxl \
-    oauthlib \
-    requests \
-    requests-oauthlib \
     && playwright install chromium
 
 # Move temporally venv folder
@@ -66,6 +75,10 @@ RUN mv venv ../
 ENV XDG_RUNTIME_DIR=/tmp/runtime-dir
 RUN mkdir $XDG_RUNTIME_DIR \
     && chmod 0700 $XDG_RUNTIME_DIR
+
+# Create data folders
+RUN mkdir -p /home/devrunner/.config/onedrive
+RUN mkdir /home/devrunner/data
 
 COPY --chown=devrunner:devrunner ./scripts/docker-run.sh /home/devrunner/
 ENTRYPOINT ["/home/devrunner/docker-run.sh"]
