@@ -54,6 +54,9 @@ RUN python3 -m venv venv \
     msgraph-sdk \
     xlrd \
     openpyxl \
+    oauthlib \
+    requests \
+    requests-oauthlib \
     && playwright install chromium
 
 # Move temporally venv folder

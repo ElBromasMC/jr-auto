@@ -6,6 +6,7 @@ import time
 import datetime
 import pytz
 import numpy as np
+import openpyxl
 from io import BytesIO
 from playwright.async_api import async_playwright
 import pandas as pd
@@ -20,6 +21,16 @@ def recreate_folder(path):
         else:
             raise ValueError("Path exists but is not a directory")
     os.makedirs(path)
+
+def format_table(wb, sheetname, df, display_name):
+    table = openpyxl.worksheet.table.Table(
+        displayName=display_name,
+        ref=f'A1:{openpyxl.utils.get_column_letter(df.shape[1])}{len(df)+1}'
+    )
+    style = openpyxl.worksheet.table.TableStyleInfo(name="TableStyleMedium9", showFirstColumn=False,
+                           showLastColumn=False, showRowStripes=True, showColumnStripes=False)
+    table.tableStyleInfo = style
+    wb[sheetname].add_table(table)
 
 async def get_data(browser, year, start_date, end_date):
     # Check if end_date is before start_date
@@ -173,7 +184,7 @@ def filter_data_to_excel(df, output_file):
     df_sorted = df_filtered.sort_values(by='valor_numeric', ascending=False, na_position='first')
 
     # Replace "Valor Referencial / Valor Estimado" values with the numeric ones.
-    df_sorted["Valor Referencial / Valor Estimado"] = df_sorted['valor_numeric']
+    #df_sorted["Valor Referencial / Valor Estimado"] = df_sorted['valor_numeric']
     # Optionally drop the helper column if no longer needed.
     df_sorted = df_sorted.drop('valor_numeric', axis=1)
 
@@ -182,12 +193,20 @@ def filter_data_to_excel(df, output_file):
         keyword_dfs[keyword] = df_sorted[df_sorted["Descripción de Objeto"].str.contains(keyword, case=False, na=False)]
 
     # Export all DataFrames to an Excel file with each on a separate sheet.
+    main_sheet_name = "Data filtrada"
     with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
         # Main filtered and sorted DataFrame.
-        df_sorted.to_excel(writer, sheet_name='Data filtrada', index=False)
+        df_sorted.to_excel(writer, sheet_name=main_sheet_name, index=False)
         # Export each keyword-specific DataFrame.
         for keyword, df_kw in keyword_dfs.items():
             df_kw.to_excel(writer, sheet_name=keyword.capitalize(), index=False)
+
+    # Format table
+    wb = openpyxl.load_workbook(filename = output_file)
+    format_table(wb, main_sheet_name, df_sorted, "Tabla")
+    for keyword, df_kw in keyword_dfs.items():
+        format_table(wb, keyword.capitalize(), df_kw, keyword.capitalize())
+    wb.save(output_file)
 
 async def main():
     recreate_folder("./tmp/")
@@ -205,7 +224,8 @@ async def main():
         else:
             browser = await p.chromium.launch(headless=True)
 
-        for year in [str(current_date.year - i) for i in range(4)]:
+        #for year in [str(current_date.year - i) for i in range(4)]:
+        for year in ["2022"]:
             print(f"Starting data collection for year {year}.")
             export_filepath = f"./data/{year}.xlsx"
             filter_filepath = f"./data/SEACE_OBRAS_{year}.xlsx"
