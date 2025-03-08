@@ -1,6 +1,5 @@
 FROM ubuntu:oracular
 
-
 RUN apt-get update \
     && apt-get install -y \
     python3 \
@@ -30,34 +29,20 @@ WORKDIR /playwright
 RUN python3 -m venv venv \
     && . venv/bin/activate \
     && pip install playwright \
-    && playwright install-deps chromium \
+    && playwright install-deps --only-shell chromium \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /playwright
 
-# Run application in development mode
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
-
-RUN USER_NAME=$(getent passwd "$USER_UID" | cut -d: -f1); \
-    if [ -n "$USER_NAME" ]; then \
-        userdel "$USER_NAME"; \
-    fi
-
-RUN GROUP_NAME=$(getent group "$USER_GID" | cut -d: -f1); \
-    if [ -n "$GROUP_NAME" ]; then \
-        groupdel "$GROUP_NAME"; \
-    fi
-
 # Create and change to non-root user
-RUN groupadd --gid $USER_GID devrunner \
-    && useradd --uid $USER_UID --gid $USER_GID -m devrunner
-
-# Change to non-root user and enter home directory
-USER devrunner
+RUN useradd -m runner
+USER runner
 
 # Create and enter src folder
-RUN mkdir /home/devrunner/src
-WORKDIR /home/devrunner/src
+RUN mkdir /home/runner/src
+WORKDIR /home/runner/src
+
+# Copy source files
+COPY --chown=runner:runner . .
 
 # Install dependencies
 RUN python3 -m venv venv \
@@ -66,20 +51,12 @@ RUN python3 -m venv venv \
     pandas \
     xlrd \
     openpyxl \
-    && playwright install chromium
-
-# Move temporally venv folder
-RUN mv venv ../
-
-# Create runtime dir
-ENV XDG_RUNTIME_DIR=/tmp/runtime-dir
-RUN mkdir $XDG_RUNTIME_DIR \
-    && chmod 0700 $XDG_RUNTIME_DIR
+    && playwright install --only-shell chromium
 
 # Create data folders
-RUN mkdir -p /home/devrunner/.config/onedrive
-RUN mkdir /home/devrunner/data
+RUN mkdir -p /home/runner/.config/onedrive
+RUN mkdir /home/runner/data
 
-COPY --chown=devrunner:devrunner ./scripts/docker-run-dev.sh /home/devrunner/
-ENTRYPOINT ["/home/devrunner/docker-run-dev.sh"]
+COPY --chown=runner:runner ./scripts/docker-run-prod.sh /home/runner/
+ENTRYPOINT ["/home/runner/docker-run-prod.sh"]
 
