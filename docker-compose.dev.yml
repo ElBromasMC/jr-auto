@@ -22,8 +22,8 @@ services:
         target: /tmp/.X11-unix/X0
         read_only: true
       # Persistent data
-      - onedrive-data:/home/devrunner/.config/onedrive
-      - jr-auto-data:/home/devrunner/data
+      - dev-onedrive-data:/home/devrunner/.config/onedrive
+      - dev-jr-auto-data:/home/devrunner/data
     restart: no
     #ipc: host
     security_opt:
@@ -37,6 +37,6 @@ services:
       - DATA_DIR=/home/devrunner/data
 
 volumes:
-  onedrive-data:
-  jr-auto-data:
+  dev-onedrive-data:
+  dev-jr-auto-data:
 

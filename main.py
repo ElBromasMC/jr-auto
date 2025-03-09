@@ -258,7 +258,6 @@ async def main():
         "--single-directory",
         EXPORT_DIR,
         "--upload-only",
-        "--no-remote-delete",
         "--resync",
         "--resync-auth",
     ], capture_output=True, text=True)

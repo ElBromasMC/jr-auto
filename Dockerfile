@@ -58,5 +58,5 @@ RUN mkdir -p /home/runner/.config/onedrive
 RUN mkdir /home/runner/data
 
 COPY --chown=runner:runner ./scripts/docker-run-prod.sh /home/runner/
-ENTRYPOINT ["/home/runner/docker-run-prod.sh"]
+COPY --chown=runner:runner ./scripts/docker-authenticate-prod.sh /home/runner/
 
