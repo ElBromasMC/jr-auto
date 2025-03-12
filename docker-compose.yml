@@ -9,8 +9,10 @@ services:
     security_opt:
       - seccomp:./seccomp_profile.json
     environment:
-      - ENV=prod
       - DATA_DIR=/home/runner/data
+      - ENV=prod
+      - EXPORT_DIR=${EXPORT_DIR}
+      - INCREMENTAL=${INCREMENTAL}
 
 volumes:
   onedrive-data:

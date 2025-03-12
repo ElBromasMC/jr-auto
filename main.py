@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 import uuid
 import shutil
@@ -13,13 +14,14 @@ from playwright.async_api import async_playwright
 import pandas as pd
 
 LIMIT_QUERY = 499
+MAIN_SHEET_NAME = "Data filtrada"
 KEYWORDS = ["UNIVERSIDAD", "HOSPITAL", "COLEGIO"]
 
 DATA_DIR  = os.environ.get("DATA_DIR", "./data")
 TMP_DIR   = f"{DATA_DIR}/tmp"
 QUERY_DIR = f"{DATA_DIR}/query"
 DRIVE_DIR = f"{DATA_DIR}/Onedrive"
-EXPORT_DIR = "Archive" # Relative to DRIVE_DIR
+EXPORT_DIR = os.environ.get("EXPORT_DIR", "EXPORT")
 
 def recreate_folder(path):
     if os.path.exists(path):
@@ -28,16 +30,6 @@ def recreate_folder(path):
         else:
             raise ValueError("Path exists but is not a directory")
     os.makedirs(path)
-
-def format_table(wb, sheetname, df, display_name):
-    table = openpyxl.worksheet.table.Table(
-        displayName=display_name,
-        ref=f'A1:{openpyxl.utils.get_column_letter(df.shape[1])}{len(df)+1}'
-    )
-    style = openpyxl.worksheet.table.TableStyleInfo(name="TableStyleMedium9", showFirstColumn=False,
-                           showLastColumn=False, showRowStripes=True, showColumnStripes=False)
-    table.tableStyleInfo = style
-    wb[sheetname].add_table(table)
 
 async def get_data(browser, year, start_date, end_date):
     # Check if end_date is before start_date
@@ -92,7 +84,7 @@ async def query_data_recursive(browser, year, start_date, end_date):
     df = await get_data(browser, year, start_date, end_date)
     
     # DEBUG
-    print(f"query_data_recursive: {start_date} {end_date} {len(df)}")
+    print(f"MAIN: query_data_recursive: {start_date} {end_date} {len(df)}")
 
     if len(df) < LIMIT_QUERY or start_date == end_date:
         return df
@@ -168,7 +160,7 @@ async def query_years_data(browser, year, current_date):
     else:
         return pd.DataFrame()
 
-def filter_data_to_excel(df, output_file):
+def filter_data(df):
     def convert_to_float(x):
         try:
             return float(x.replace(',', ''))
@@ -199,18 +191,74 @@ def filter_data_to_excel(df, output_file):
     for keyword in KEYWORDS:
         keyword_dfs[keyword] = df_sorted[df_sorted["Descripción de Objeto"].str.contains(keyword, case=False, na=False)]
 
+    return df_sorted, keyword_dfs
+
+def prepare_data_for_excel(main_df, df_map, filter_filepath):
+    if os.path.exists(filter_filepath):
+        xls = pd.ExcelFile(filter_filepath)
+        
+        main_sheet_name = MAIN_SHEET_NAME.capitalize()
+        if main_sheet_name in xls.sheet_names:
+            existing_main_df = pd.read_excel(xls, main_sheet_name)
+            new_main_rows = main_df[~main_df['Nomenclatura'].isin(existing_main_df['Nomenclatura'])]
+            updated_main_df = pd.concat([existing_main_df, new_main_rows], ignore_index=True)
+        else:
+            updated_main_df = main_df
+        for keyword in KEYWORDS:
+            if keyword in df_map:
+                kw_sheet_name = keyword.capitalize()
+                if kw_sheet_name in xls.sheet_names:
+                    existing_keyword_df = pd.read_excel(xls, kw_sheet_name)
+                    new_keyword_rows = df_map[keyword][~df_map[keyword]['Nomenclatura'].isin(existing_keyword_df['Nomenclatura'])]
+                    df_map[keyword] = pd.concat([existing_keyword_df, new_keyword_rows], ignore_index=True)
+        return updated_main_df
+    else:
+        return main_df
+
+def format_table(wb, sheetname, df, display_name):
+    # Define styles
+    style = openpyxl.worksheet.table.TableStyleInfo(name="TableStyleMedium9", showFirstColumn=False,
+                           showLastColumn=False, showRowStripes=True, showColumnStripes=False)
+    alignment = openpyxl.styles.Alignment(wrap_text=True, vertical='top', horizontal='center')
+    width_dict = {
+        "Descripción de Objeto": 60,
+        "Nombre o Sigla de la Entidad": 40,
+        "Valor Referencial / Valor Estimado": 30
+    }
+
+    # Apply the styles
+    table = openpyxl.worksheet.table.Table(
+        displayName=display_name,
+        ref=f'A1:{openpyxl.utils.get_column_letter(df.shape[1])}{len(df)+1}'
+    )
+    table.tableStyleInfo = style
+    wb[sheetname].add_table(table)
+
+    # Set column widths based on column names
+    for idx, col_name in enumerate(df.columns, start=1):
+        col_letter = openpyxl.utils.get_column_letter(idx)
+        width = width_dict.get(col_name, 25)
+        wb[sheetname].column_dimensions[col_letter].width = width
+    # Apply alignment to all cells in the table
+    for row in wb[sheetname].iter_rows(min_row=1, max_row=len(df)+1, min_col=1, max_col=df.shape[1]):
+        for cell in row:
+            cell.alignment = alignment
+    # Set row height to auto
+    for row_num in range(2, len(df) + 2):
+        wb[sheetname].row_dimensions[row_num].height = 90
+
+def data_to_excel(df_sorted, keyword_dfs, output_file):
     # Export all DataFrames to an Excel file with each on a separate sheet.
-    main_sheet_name = "Data filtrada"
     with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
         # Main filtered and sorted DataFrame.
-        df_sorted.to_excel(writer, sheet_name=main_sheet_name, index=False)
+        df_sorted.to_excel(writer, sheet_name=MAIN_SHEET_NAME, index=False)
         # Export each keyword-specific DataFrame.
         for keyword, df_kw in keyword_dfs.items():
             df_kw.to_excel(writer, sheet_name=keyword.capitalize(), index=False)
 
     # Format table
     wb = openpyxl.load_workbook(filename = output_file)
-    format_table(wb, main_sheet_name, df_sorted, "Tabla")
+    format_table(wb, MAIN_SHEET_NAME, df_sorted, "Tabla")
     for keyword, df_kw in keyword_dfs.items():
         format_table(wb, keyword.capitalize(), df_kw, keyword.capitalize())
     wb.save(output_file)
@@ -220,8 +268,24 @@ async def main():
         raise FileNotFoundError(f"Directory {DATA_DIR} does not exist!")
 
     recreate_folder(TMP_DIR)
+    recreate_folder(DRIVE_DIR)
     os.makedirs(QUERY_DIR, exist_ok=True)
     os.makedirs(f"{DRIVE_DIR}/{EXPORT_DIR}", exist_ok=True)
+
+    # Import data
+    if os.environ.get("INCREMENTAL") != "no":
+        result = subprocess.run([
+            "onedrive",
+            "--sync",
+            "--syncdir",
+            DRIVE_DIR,
+            "--single-directory",
+            EXPORT_DIR,
+            "--download-only",
+            "--cleanup-local-files",
+        ])
+        if result.returncode != 0:
+            sys.exit(result.returncode)
 
     # Get date data
     timezone = pytz.timezone('America/Lima')
@@ -234,17 +298,20 @@ async def main():
         else:
             browser = await p.chromium.launch(headless=True)
 
+        # TODO
         for year in [str(current_date.year - i) for i in range(4)]:
-            print(f"Starting data collection for year {year}.")
+            print(f"MAIN: Starting data collection for year {year}.")
             export_filepath = f"{QUERY_DIR}/{year}.xlsx"
             filter_filepath = f"{DRIVE_DIR}/{EXPORT_DIR}/SEACE_OBRAS_{year}.xlsx"
             if os.path.exists(export_filepath) and year != str(current_date.year):
-                print(f"{export_filepath} already exists, skipping query.")
+                print(f"MAIN: {export_filepath} already exists, skipping query.")
                 df = pd.read_excel(export_filepath)
             else:
                 df = await query_years_data(browser, year, current_date)
                 df.to_excel(export_filepath, index=False)
-            filter_data_to_excel(df, filter_filepath)
+            main_df, df_map = filter_data(df)
+            main_df = prepare_data_for_excel(main_df, df_map, filter_filepath)
+            data_to_excel(main_df, df_map, filter_filepath)
 
         # Cleanup
         await browser.close()
@@ -258,14 +325,10 @@ async def main():
         "--single-directory",
         EXPORT_DIR,
         "--upload-only",
-        "--resync",
-        "--resync-auth",
-    ], capture_output=True, text=True)
-
-    if result.returncode == 0:
-        print(f"Successfully uploaded files")
-    else:
-        print(f"Error uploading files: {result.stderr}")
+        "--no-remote-delete",
+    ])
+    if result.returncode != 0:
+        sys.exit(result.returncode)
 
 asyncio.run(main())
 

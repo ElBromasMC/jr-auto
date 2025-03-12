@@ -33,8 +33,10 @@ services:
       - WAYLAND_DISPLAY=${WAYLAND_DISPLAY}
       - DISPLAY=${DISPLAY}
       # App environment
-      - ENV=${ENV}
       - DATA_DIR=/home/devrunner/data
+      - ENV=${ENV}
+      - EXPORT_DIR=${EXPORT_DIR}
+      - INCREMENTAL=${INCREMENTAL}
 
 volumes:
   dev-onedrive-data:
