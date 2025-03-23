@@ -77,7 +77,7 @@ def prepare_data_for_excel(df_map, filter_filepath):
                 new_rows = df[~df['Nomenclatura'].isin(existing_df['Nomenclatura'])]
                 df_map[key] = pd.concat([existing_df, new_rows], ignore_index=True)
 
-def format_table(wb, sheetname, df, display_name, output_file):
+def format_table(wb, sheetname, df, display_name, output_file, temp_index_array=None):
     # Define styles
     style = openpyxl.worksheet.table.TableStyleInfo(name="TableStyleMedium9", showFirstColumn=False,
                            showLastColumn=False, showRowStripes=True, showColumnStripes=False)
@@ -122,17 +122,24 @@ def format_table(wb, sheetname, df, display_name, output_file):
         old_sheet = None
 
     # Apply alignment to all cells in the table
-    for row in wb[sheetname].iter_rows(min_row=1, max_row=len(df)+1, min_col=1, max_col=df.shape[1]):
+    for new_row_idx, row in enumerate(
+            wb[sheetname].iter_rows(min_row=1, max_row=len(df)+1, min_col=1, max_col=df.shape[1]),
+            start=1):
+        if new_row_idx == 1:
+            for cell in row:
+                cell.font = font
+                cell.alignment = alignment
+            continue
+        old_row_idx = temp_index_array[new_row_idx - 2] + 1 if temp_index_array is not None else new_row_idx
         for cell in row:
+            col_letter = openpyxl.utils.get_column_letter(cell.column)
             # Copy fill style from the old workbook if the sheet exists and the cell has a fill style
             if old_sheet is not None:
-                old_cell = old_sheet[cell.coordinate]
+                old_cell = old_sheet[f'{col_letter}{old_row_idx}']
                 if old_cell.fill and old_cell.fill.fill_type is not None:
                     cell.fill = copy(old_cell.fill)
-
-            # Apply other formatting
+            # Apply font and alignment
             cell.font = font
-            cell.alignment = alignment
             if target_index and cell.column == target_index:
                 cell.alignment = right_alignment
             else:
@@ -144,15 +151,30 @@ def format_table(wb, sheetname, df, display_name, output_file):
 
 def data_to_excel(keyword_dfs, output_file):
     filepath = f"{TMP_DIR}/{uuid.uuid4()}.xlsx"
+    temp_indexes = {}
     # Export all DataFrames to an Excel file with each on a separate sheet.
     with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
         for keyword, df_kw in keyword_dfs.items():
+            # Add a temporary index column to preserve the original row positions
+            df_kw['temp_index'] = range(1, len(df_kw) + 1)
+
+            # TODO
+            # Sort the DataFrame by 'Fecha y Hora de Publicacion' in descending order
+            df_kw.sort_values(by='Fecha y Hora de Publicacion', ascending=False, inplace=True)
+
+            # Extract the temporary index as an array and then remove the column
+            temp_indexes[keyword] = df_kw['temp_index'].to_numpy()
+            df_kw.drop(columns=['temp_index'], inplace=True)
+
             df_kw.to_excel(writer, sheet_name=keyword.capitalize(), index=False)
 
     # Format table
     wb = openpyxl.load_workbook(filename = filepath)
     for keyword, df_kw in keyword_dfs.items():
-        format_table(wb, keyword.capitalize(), df_kw, keyword.replace(" ", "").capitalize(), output_file)
+        # Retrieve the temp index array for this sheet, if available
+        temp_index_array = temp_indexes.get(keyword, None)
+
+        format_table(wb, keyword.capitalize(), df_kw, keyword.replace(" ", "").capitalize(), output_file, temp_index_array)
     wb.save(output_file)
 
 #
@@ -283,6 +305,12 @@ def filter_data_obras(df, lower_bound):
     # Optionally drop the helper column if no longer needed.
     df_sorted = df_sorted.drop('valor_numeric', axis=1)
 
+    # Convert the publication date column to datetime
+    df_sorted['Fecha y Hora de Publicacion'] = pd.to_datetime(
+        df_sorted['Fecha y Hora de Publicacion'],
+        format='%d/%m/%Y %H:%M'
+    )
+
     dfs = {}
     for keyword in KEYWORDS:
         dfs[keyword] = df_sorted[df_sorted["Descripción de Objeto"].str.contains(keyword, case=False, na=False)]
@@ -353,6 +381,7 @@ async def query_vidrios_data(browser, year, current_date):
     if given_year > current_date.year:
         return pd.DataFrame()
 
+    global_results = []
     for filter in KEYWORDS_VIDRIOS:
         results = []
 
@@ -370,10 +399,20 @@ async def query_vidrios_data(browser, year, current_date):
 
         # Combine all data into one DataFrame
         df = pd.concat(results, ignore_index=True)[::-1].reset_index(drop=True)
-        # Drop the "N°" column.
-        if "N°" in df.columns:
-            df = df.drop("N°", axis=1)
-        df_map[filter] = df
+        global_results.append(df)
+    global_df = pd.concat(global_results, ignore_index=True)
+
+    # Drop the "N°" column.
+    if "N°" in global_df.columns:
+        global_df = global_df.drop("N°", axis=1)
+
+    # Convert the publication date column to datetime
+    global_df['Fecha y Hora de Publicacion'] = pd.to_datetime(
+        global_df['Fecha y Hora de Publicacion'],
+        format='%d/%m/%Y %H:%M'
+    )
+
+    df_map[MAIN_SHEET_NAME] = global_df
 
     return df_map
 
@@ -424,7 +463,7 @@ async def main():
         data_to_excel(df_map, filter_filepath)
 
         # Obras fetch
-        for year in [str(current_date.year - i) for i in range(4)]:
+        for year in [str(current_date.year - i) for i in range(1)]:
             print(f"MAIN: Starting data collection for year {year}.")
             export_filepath = f"{QUERY_DIR}/{year}.xlsx"
             filter_filepath = f"{DRIVE_DIR}/{EXPORT_DIR}/SEACE_OBRAS_{year}.xlsx"
