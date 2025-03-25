@@ -158,9 +158,13 @@ def data_to_excel(keyword_dfs, output_file):
             # Add a temporary index column to preserve the original row positions
             df_kw['temp_index'] = range(1, len(df_kw) + 1)
 
-            # TODO
             # Sort the DataFrame by 'Fecha y Hora de Publicacion' in descending order
-            df_kw.sort_values(by='Fecha y Hora de Publicacion', ascending=False, inplace=True)
+            df_kw['valor_datetime'] = pd.to_datetime(
+                df_kw['Fecha y Hora de Publicacion'],
+                format='%d/%m/%Y %H:%M'
+            )
+            df_kw.sort_values(by='valor_datetime', ascending=False, inplace=True)
+            df_kw.drop('valor_datetime', axis=1, inplace=True)
 
             # Extract the temporary index as an array and then remove the column
             temp_indexes[keyword] = df_kw['temp_index'].to_numpy()
@@ -305,12 +309,6 @@ def filter_data_obras(df, lower_bound):
     # Optionally drop the helper column if no longer needed.
     df_sorted = df_sorted.drop('valor_numeric', axis=1)
 
-    # Convert the publication date column to datetime
-    df_sorted['Fecha y Hora de Publicacion'] = pd.to_datetime(
-        df_sorted['Fecha y Hora de Publicacion'],
-        format='%d/%m/%Y %H:%M'
-    )
-
     dfs = {}
     for keyword in KEYWORDS:
         dfs[keyword] = df_sorted[df_sorted["Descripción de Objeto"].str.contains(keyword, case=False, na=False)]
@@ -405,12 +403,6 @@ async def query_vidrios_data(browser, year, current_date):
     # Drop the "N°" column.
     if "N°" in global_df.columns:
         global_df = global_df.drop("N°", axis=1)
-
-    # Convert the publication date column to datetime
-    global_df['Fecha y Hora de Publicacion'] = pd.to_datetime(
-        global_df['Fecha y Hora de Publicacion'],
-        format='%d/%m/%Y %H:%M'
-    )
 
     df_map[MAIN_SHEET_NAME] = global_df
 
