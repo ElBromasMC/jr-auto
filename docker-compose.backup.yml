@@ -1,0 +1,38 @@
+services:
+  backup:
+    image: alpine
+    volumes:
+      - type: bind
+        source: ./scripts/backup.sh
+        target: /backup.sh
+        read_only: true
+      - ./backup:/backup
+      # Volumes to backup
+      - onedrive-data:/mnt/onedrive-data
+      - jr-auto-data:/mnt/jr-auto-data
+    environment:
+      - BACKUP_ROOT=/backup
+    command: >
+      sh -c "/backup.sh
+      onedrive-data '/mnt/onedrive-data'
+      jr-auto-data '/mnt/jr-auto-data'
+      "
+  restore:
+    image: alpine
+    volumes:
+      - type: bind
+        source: ./scripts/restore.sh
+        target: /restore.sh
+        read_only: true
+      - ./backup:/backup
+      # Volumes to restore
+      - onedrive-data:/mnt/onedrive-data
+      - jr-auto-data:/mnt/jr-auto-data
+    environment:
+      - BACKUP_ROOT=/backup
+    command: >
+      sh -c "/restore.sh
+      onedrive-data '/mnt/onedrive-data'
+      jr-auto-data '/mnt/jr-auto-data'
+      "
+

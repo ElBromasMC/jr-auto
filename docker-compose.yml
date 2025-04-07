@@ -1,13 +1,10 @@
 services:
   jr-auto:
     image: elbromasmc/jr-auto
+    restart: no
     volumes:
       - onedrive-data:/home/runner/.config/onedrive
       - jr-auto-data:/home/runner/data
-    restart: no
-    ipc: host
-    security_opt:
-      - seccomp:./seccomp_profile.json
     environment:
       - DATA_DIR=/home/runner/data
       - ENV=prod
