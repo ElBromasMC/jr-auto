@@ -1,12 +1,10 @@
 services:
   devrunner:
+    userns_mode: "keep-id:uid=1001,gid=1001"
     image: devrunner-jr-auto
     build:
       context: .
       dockerfile: ./Dockerfile.dev
-      args:
-        - USER_UID=${USER_UID}
-    #user: "devrunner:devrunner"
     volumes:
       # Bind source directory
       - type: bind
@@ -25,20 +23,20 @@ services:
       - dev-onedrive-data:/home/devrunner/.config/onedrive
       - dev-jr-auto-data:/home/devrunner/data
     restart: no
-    #ipc: host
-    security_opt:
-      - seccomp:./seccomp_profile.json
     environment:
       # Display environment
       - WAYLAND_DISPLAY=${WAYLAND_DISPLAY}
       - DISPLAY=${DISPLAY}
       # App environment
       - DATA_DIR=/home/devrunner/data
-      - ENV=${ENV}
+      - ENV=dev
       - EXPORT_DIR=${EXPORT_DIR}
       - INCREMENTAL=${INCREMENTAL}
 
 volumes:
   dev-onedrive-data:
   dev-jr-auto-data:
+
+x-podman:
+  in_pod: false
 

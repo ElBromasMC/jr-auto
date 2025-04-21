@@ -34,23 +34,9 @@ RUN python3 -m venv venv \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /playwright
 
-# Run application in development mode
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
-
-RUN USER_NAME=$(getent passwd "$USER_UID" | cut -d: -f1); \
-    if [ -n "$USER_NAME" ]; then \
-        userdel "$USER_NAME"; \
-    fi
-
-RUN GROUP_NAME=$(getent group "$USER_GID" | cut -d: -f1); \
-    if [ -n "$GROUP_NAME" ]; then \
-        groupdel "$GROUP_NAME"; \
-    fi
-
 # Create and change to non-root user
-RUN groupadd --gid $USER_GID devrunner \
-    && useradd --uid $USER_UID --gid $USER_GID -m devrunner
+RUN groupadd --gid 1001 devrunner \
+    && useradd --uid 1001 --gid 1001 -m devrunner
 
 # Change to non-root user and enter home directory
 USER devrunner

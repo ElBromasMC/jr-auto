@@ -25,6 +25,10 @@ QUERY_DIR = f"{DATA_DIR}/query"
 DRIVE_DIR = f"{DATA_DIR}/Onedrive"
 EXPORT_DIR = os.environ.get("EXPORT_DIR", "EXPORT")
 
+RENAME_MAP = {
+    "VR / VE / Cuantía de la contratación": "Valor Referencial / Valor Estimado"
+}
+
 #
 # Util
 #
@@ -36,6 +40,65 @@ def recreate_folder(path):
         else:
             raise ValueError("Path exists but is not a directory")
     os.makedirs(path)
+
+def validate_dataframe_header(df, rename_map=None):
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Input 'df' must be a pandas DataFrame.")
+    if rename_map is None:
+        rename_map = {}
+    if not isinstance(rename_map, dict):
+        raise TypeError("Input 'rename_map' must be a dictionary or None.")
+
+    required_header = [
+        'N°',
+        'Nombre o Sigla de la Entidad',
+        'Fecha y Hora de Publicacion',
+        'Nomenclatura',
+        'Reiniciado Desde',
+        'Objeto de Contratación',
+        'Descripción de Objeto',
+        'Valor Referencial / Valor Estimado',
+        'Moneda',
+        'Versión SEACE'
+    ]
+
+    current_header = df.columns.tolist()
+
+    if current_header == required_header:
+        print("Header is valid.")
+        return df
+
+    print("Initial header check failed. Attempting renames based on provided map...")
+
+    if not rename_map:
+        print("No rename map provided or map is empty.")
+        raise ValueError(
+            "Header is invalid and no rename map was provided to attempt corrections.\n"
+            f"Expected: {required_header}\n"
+            f"Got: {current_header}"
+        )
+
+    try:
+        df_renamed = df.rename(columns=rename_map, errors='ignore')
+        renamed_header = df_renamed.columns.tolist()
+
+        # Check if any rename actually happened
+        if renamed_header != current_header:
+             print(f"Applied potential renames. Columns after attempting rename: {renamed_header}")
+        else:
+             print("No applicable columns found for renaming based on the provided map keys.")
+
+        if renamed_header == required_header:
+            print("Header is now valid after applying potential renames.")
+            return df_renamed
+        else:
+            raise ValueError(
+                "Header is invalid even after attempting renames from the map.\n"
+                f"Expected: {required_header}\n"
+                f"Got (after potential renames): {renamed_header}"
+            )
+    except Exception as e:
+         raise ValueError(f"An error occurred during column renaming: {e}")
 
 async def general_query_data_recursive(get_data, browser, year, start_date, end_date, opts):
     # Ensure the date range is valid
@@ -200,9 +263,11 @@ async def get_data_obras(browser, year, start_date, end_date, opts):
 
     # Web scraping
     await page.goto("https://prod2.seace.gob.pe/seacebus-uiwd-pub/buscadorPublico/buscadorPublico.xhtml")
-    await page.locator("[id^=\"tbBuscador\\:idFormBuscarProceso\\:j_idt\"][id$=\"_panel\"]").get_by_text("Obra", exact=True).dispatch_event("click")
+    await page.get_by_role("link", name="Buscador de Procedimientos de").click()
+    time.sleep(9)
     await page.locator("[id=\"tbBuscador\\:idFormBuscarProceso\\:anioConvocatoria_label\"]").click()
     await page.locator("[id=\"tbBuscador\\:idFormBuscarProceso\\:anioConvocatoria_panel\"]").get_by_text(year).click()
+    await page.locator("[id^=\"tbBuscador\\:idFormBuscarProceso\\:j_idt\"][id$=\"_panel\"]").get_by_text("Obra", exact=True).dispatch_event("click")
     await page.get_by_text("Búsqueda Avanzada").click()
     await page.locator("[id=\"tbBuscador\\:idFormBuscarProceso\\:dfechaInicio_input\"]").click()
     await page.locator("[id=\"tbBuscador\\:idFormBuscarProceso\\:dfechaInicio_input\"]").fill(f_start_date)
@@ -227,6 +292,9 @@ async def get_data_obras(browser, year, start_date, end_date, opts):
     await context.close()
 
     df = pd.read_excel(filepath)
+
+    df = validate_dataframe_header(df, RENAME_MAP)
+
     return df
 
 async def query_obras_data(browser, year, current_date):
@@ -336,6 +404,8 @@ async def get_data_vidrios(browser, year, start_date, end_date, opts):
 
     # Web scraping
     await page.goto("https://prod2.seace.gob.pe/seacebus-uiwd-pub/buscadorPublico/buscadorPublico.xhtml")
+    await page.get_by_role("link", name="Buscador de Procedimientos de").click()
+    time.sleep(9)
     await page.locator("[id=\"tbBuscador\\:idFormBuscarProceso\\:anioConvocatoria_label\"]").click()
     await page.locator("[id=\"tbBuscador\\:idFormBuscarProceso\\:anioConvocatoria_panel\"]").get_by_text(year).click()
     await page.get_by_text("Búsqueda Avanzada").click()
@@ -365,6 +435,8 @@ async def get_data_vidrios(browser, year, start_date, end_date, opts):
 
     df = pd.read_excel(filepath)
     df = df[::-1].reset_index(drop=True)
+
+    df = validate_dataframe_header(df, RENAME_MAP)
 
     return df
 
