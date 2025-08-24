@@ -527,7 +527,7 @@ async def main():
         data_to_excel(df_map, filter_filepath)
 
         # Obras fetch
-        for year in [str(current_date.year - i) for i in range(1)]:
+        for year in [str(current_date.year - i) for i in range(4)]:
             print(f"MAIN: Starting data collection for year {year}.")
             export_filepath = f"{QUERY_DIR}/{year}.xlsx"
             filter_filepath = f"{DRIVE_DIR}/{EXPORT_DIR}/SEACE_OBRAS_{year}.xlsx"

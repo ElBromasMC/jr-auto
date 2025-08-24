@@ -2,6 +2,7 @@ services:
   jr-auto:
     image: elbromasmc/jr-auto
     restart: no
+    network_mode: "pasta"
     volumes:
       - onedrive-data:/home/runner/.config/onedrive
       - jr-auto-data:/home/runner/data
